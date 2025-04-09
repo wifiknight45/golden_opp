@@ -25,11 +25,24 @@
         <option value="ru">Russian</option>
     </select><br><br>
 
-    <label for="city">City:</label>
-    <input type="text" id="city" value="New York"><br><br>
+    <label for="searchType">Search by:</label>
+    <select id="searchType">
+        <option value="city">City</option>
+        <option value="zip">Zip Code</option>
+    </select><br><br>
 
-    <label for="country">Country:</label>
-    <input type="text" id="country" value="USA"><br><br>
+    <div id="cityInput">
+        <label for="city">City:</label>
+        <input type="text" id="city" value="New York"><br><br>
+
+        <label for="country">Country:</label>
+        <input type="text" id="country" value="USA"><br><br>
+    </div>
+
+    <div id="zipInput" style="display: none;">
+        <label for="zip">Zip Code:</label>
+        <input type="text" id="zip" value="10001"><br><br>
+    </div>
 
     <label for="timezone">Timezone:</label>
     <input type="text" id="timezone" value="America/New_York"><br><br>
@@ -43,15 +56,38 @@
     <script>
         async function main() {
             let pyodide = await loadPyodide();
-            await pyodide.loadPackage(["pytz", "astral"]); // Load necessary packages
+            await pyodide.loadPackage("tzdata"); // Load tzdata
+            await pyodide.loadPackage(["pytz", "astral", "geopy"]); // Load packages
+            
 
             let calculateButton = document.getElementById("calculate");
             let outputDiv = document.getElementById("output");
+            let searchTypeSelect = document.getElementById("searchType");
+            let cityInputDiv = document.getElementById("cityInput");
+            let zipInputDiv = document.getElementById("zipInput");
+
+            searchTypeSelect.addEventListener("change", () => {
+                if (searchTypeSelect.value === "city") {
+                    cityInputDiv.style.display = "block";
+                    zipInputDiv.style.display = "none";
+                } else {
+                    cityInputDiv.style.display = "none";
+                    zipInputDiv.style.display = "block";
+                }
+            });
 
             calculateButton.addEventListener("click", async () => {
                 let lang = document.getElementById("lang").value;
-                let city = document.getElementById("city").value;
-                let country = document.getElementById("country").value;
+                let searchType = searchTypeSelect.value;
+                let city, country, zipCode;
+
+                if (searchType === "city") {
+                    city = document.getElementById("city").value;
+                    country = document.getElementById("country").value;
+                } else {
+                    zipCode = document.getElementById("zip").value;
+                }
+
                 let timezone = document.getElementById("timezone").value;
 
                 // Python code to be executed
@@ -60,6 +96,7 @@ import datetime
 import pytz
 from astral import LocationInfo
 from astral.sun import sun
+from geopy.geocoders import Nominatim # Import Nominatim
 
 translations = {
     "en": {"date": "Date", "morning_golden": "Morning Golden Hour", "evening_golden": "Evening Golden Hour", "to": "to"},
@@ -82,9 +119,20 @@ def get_golden_hours(date, location, timezone):
 def format_time(dt):
     return dt.strftime("%H:%M:%S")
 
-def calculate_golden_hours(lang, city, country, timezone):
+def calculate_golden_hours(lang, city, country, zipCode, timezone):
     try:
-        location = LocationInfo(city, country, timezone)
+        if city and country:
+            location = LocationInfo(city, country, timezone)
+        elif zipCode:
+            geolocator = Nominatim(user_agent="golden_opp") # Create a geolocator
+            location_data = geolocator.geocode(zipCode) # Get location data from zip code
+            if location_data:
+                location = LocationInfo(location_data.address, "", timezone) # Create LocationInfo
+            else:
+                return "Error: Could not find location for zip code."
+        else:
+            return "Error: Please provide either city and country or zip code."
+
         timezone = pytz.timezone(timezone)
     except Exception as e:
         return f"Error with location/timezone: {e}. Using default: New York, USA."
@@ -92,7 +140,11 @@ def calculate_golden_hours(lang, city, country, timezone):
     current_date = datetime.date(2025, 4, 9)
     delta = datetime.timedelta(days=1)
     
-    output = f"Golden Hour Times for {city}, {country} (Timezone: {timezone})\\n"
+    output = ""
+    if city and country:
+        output += f"Golden Hour Times for {city}, {country} (Timezone: {timezone})\\n"
+    elif zipCode:
+        output += f"Golden Hour Times for Zip Code: {zipCode} (Timezone: {timezone})\\n"
     
     for _ in range(5):  # Calculate for 5 days
         morning_start, morning_end, evening_start, evening_end = get_golden_hours(current_date, location, timezone)
@@ -105,8 +157,8 @@ def calculate_golden_hours(lang, city, country, timezone):
     
     return output
 
-result = calculate_golden_hours('${lang}', '${city}', '${country}', '${timezone}')
-print(result)
+result = calculate_golden_hours('${lang}', '${city || ""}', '${country || ""}', '${zipCode || ""}', '${timezone}')
+print(result) 
 `;
 
                 try {
@@ -117,6 +169,11 @@ print(result)
                 }
             });
         }
+
+        main();
+    </script>
+</body>
+</html>
 
         main();
     </script>

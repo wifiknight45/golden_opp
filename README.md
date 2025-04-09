@@ -1,4 +1,4 @@
-# golden_opp
+# golden_opp is currently under development 
 
 # Golden Hour Times (golden_opp)
 

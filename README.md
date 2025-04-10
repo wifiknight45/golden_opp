@@ -62,4 +62,5 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 - The `pytz` library for handling time zones.
 - Code developed by Grok AI
 - Read me developed by Google Gemini AI
-- edited and tweaked by wifiknight45
+- Debugging or error fixes/updated syntax by Microsoft Copilot 
+- concept and co-creator @wifiknight45

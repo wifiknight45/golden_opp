@@ -58,7 +58,6 @@
             let pyodide = await loadPyodide();
             await pyodide.loadPackage("tzdata"); // Load tzdata
             await pyodide.loadPackage(["pytz", "astral", "geopy"]); // Load packages
-            
 
             let calculateButton = document.getElementById("calculate");
             let outputDiv = document.getElementById("output");
@@ -79,7 +78,7 @@
             calculateButton.addEventListener("click", async () => {
                 let lang = document.getElementById("lang").value;
                 let searchType = searchTypeSelect.value;
-                let city, country, zipCode;
+                let city = "", country = "", zipCode = "";
 
                 if (searchType === "city") {
                     city = document.getElementById("city").value;
@@ -92,11 +91,21 @@
 
                 // Python code to be executed
                 let pythonCode = `
+result = ""
+try:
+    result = calculate_golden_hours('${lang}', '${city}', '${country}', '${zipCode}', '${timezone}')
+except Exception as e:
+    result = f"Error: {str(e)}"
+print(result)
+`;
+
+                try {
+                    pyodide.runPython(`
 import datetime
 import pytz
 from astral import LocationInfo
 from astral.sun import sun
-from geopy.geocoders import Nominatim # Import Nominatim
+from geopy.geocoders import Nominatim
 
 translations = {
     "en": {"date": "Date", "morning_golden": "Morning Golden Hour", "evening_golden": "Evening Golden Hour", "to": "to"},
@@ -124,10 +133,10 @@ def calculate_golden_hours(lang, city, country, zipCode, timezone):
         if city and country:
             location = LocationInfo(city, country, timezone)
         elif zipCode:
-            geolocator = Nominatim(user_agent="golden_opp") # Create a geolocator
-            location_data = geolocator.geocode(zipCode) # Get location data from zip code
+            geolocator = Nominatim(user_agent="golden_opp") 
+            location_data = geolocator.geocode(zipCode) 
             if location_data:
-                location = LocationInfo(location_data.address, "", timezone) # Create LocationInfo
+                location = LocationInfo(location_data.address, "", timezone)
             else:
                 return "Error: Could not find location for zip code."
         else:
@@ -135,9 +144,9 @@ def calculate_golden_hours(lang, city, country, zipCode, timezone):
 
         timezone = pytz.timezone(timezone)
     except Exception as e:
-        return f"Error with location/timezone: {e}. Using default: New York, USA."
+        return f"Error with location/timezone: {e}. Please check your inputs."
 
-    current_date = datetime.date(2025, 4, 9)
+    current_date = datetime.date.today()
     delta = datetime.timedelta(days=1)
     
     output = ""
@@ -148,7 +157,7 @@ def calculate_golden_hours(lang, city, country, zipCode, timezone):
     
     for _ in range(5):  # Calculate for 5 days
         morning_start, morning_end, evening_start, evening_end = get_golden_hours(current_date, location, timezone)
-        t = translations[lang]
+        t = translations.get(lang, translations["en"])  # Default to English if lang is invalid
         output += f"{t['date']}: {current_date}\\n"
         output += f"{t['morning_golden']}: {format_time(morning_start)} {t['to']} {format_time(morning_end)}\\n"
         output += f"{t['evening_golden']}: {format_time(evening_start)} {t['to']} {format_time(evening_end)}\\n"
@@ -157,23 +166,13 @@ def calculate_golden_hours(lang, city, country, zipCode, timezone):
     
     return output
 
-result = calculate_golden_hours('${lang}', '${city || ""}', '${country || ""}', '${zipCode || ""}', '${timezone}')
-print(result) 
-`;
-
-                try {
-                    pyodide.runPython(pythonCode);
+` + pythonCode);
                     outputDiv.innerText = pyodide.globals.get("result");
                 } catch (err) {
                     outputDiv.innerText = "Error: " + err;
                 }
             });
         }
-
-        main();
-    </script>
-</body>
-</html>
 
         main();
     </script>

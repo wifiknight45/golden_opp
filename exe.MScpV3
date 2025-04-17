@@ -1,0 +1,69 @@
+import requests
+from flask import Flask, render_template, request
+from datetime import datetime, timedelta
+import pytz
+
+app = Flask(__name__)
+
+# Replace 'YOUR_API_KEY' with your OpenWeatherMap API key
+API_KEY = "YOUR_API_KEY"
+
+@app.route("/", methods=["GET", "POST"])
+def golden_hour():
+    output = ""
+    lang = request.form.get("lang", "en")
+    search_type = request.form.get("searchType", "city")
+    city = request.form.get("city", "")
+    country = request.form.get("country", "")
+    zip_code = request.form.get("zip", "")
+    timezone = request.form.get("timezone", "UTC")
+
+    if request.method == "POST" and "calculate" in request.form:
+        try:
+            # Fetch sunrise and sunset times from OpenWeatherMap API
+            if search_type == "city" and city and country:
+                query = f"{city},{country}"
+            elif search_type == "zip" and zip_code:
+                query = zip_code
+            else:
+                raise ValueError("Please provide a valid city/country or zip code.")
+
+            url = f"http://api.openweathermap.org/data/2.5/weather?q={query}&appid={API_KEY}"
+            response = requests.get(url)
+            response.raise_for_status()
+            data = response.json()
+
+            # Extract sunrise and sunset times
+            timezone_offset = data["timezone"]
+            sunrise_utc = datetime.utcfromtimestamp(data["sys"]["sunrise"])
+            sunset_utc = datetime.utcfromtimestamp(data["sys"]["sunset"])
+
+            # Adjust times for the specified timezone
+            tz = pytz.timezone(timezone)
+            sunrise = sunrise_utc + timedelta(seconds=timezone_offset)
+            sunset = sunset_utc + timedelta(seconds=timezone_offset)
+            sunrise = sunrise.astimezone(tz)
+            sunset = sunset.astimezone(tz)
+
+            # Calculate golden hour times
+            golden_hour_start = sunrise - timedelta(minutes=30)
+            golden_hour_end = sunset + timedelta(minutes=30)
+
+            output = f"""
+            Golden Hour Times:
+            Sunrise: {sunrise.strftime('%H:%M:%S')}
+            Sunset: {sunset.strftime('%H:%M:%S')}
+            Morning Golden Hour: {golden_hour_start.strftime('%H:%M:%S')} - {sunrise.strftime('%H:%M:%S')}
+            Evening Golden Hour: {sunset.strftime('%H:%M:%S')} - {golden_hour_end.strftime('%H:%M:%S')}
+            """
+        except requests.exceptions.RequestException as e:
+            output = f"Error fetching data from OpenWeatherMap: {str(e)}"
+        except Exception as e:
+            output = f"Error calculating golden hour times: {str(e)}"
+
+    return render_template("golden_hour.html", lang=lang, search_type=search_type, city=city,
+                           country=country, zip_code=zip_code, timezone=timezone, output=output)
+
+
+if __name__ == "__main__":
+    app.run(debug=True)

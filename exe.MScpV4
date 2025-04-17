@@ -1,0 +1,92 @@
+import requests
+from flask import Flask, render_template, request, jsonify
+from datetime import datetime, timedelta
+import pytz
+from babel import Locale, dates
+
+app = Flask(__name__)
+
+API_KEY = "YOUR_API_KEY"  # Replace with your OpenWeatherMap API key
+
+@app.route("/", methods=["GET", "POST"])
+def golden_hour():
+    # Default values
+    output = ""
+    lang = request.form.get("lang", "en")
+    search_type = request.form.get("searchType", "city")
+    city = request.form.get("city", "")
+    country = request.form.get("country", "")
+    zip_code = request.form.get("zip", "")
+    timezone = request.form.get("timezone", "UTC")
+    date_selected = request.form.get("date", datetime.now().strftime('%Y-%m-%d'))
+    tips = []
+
+    if request.method == "POST" and "calculate" in request.form:
+        try:
+            query = f"{city},{country}" if search_type == "city" else zip_code
+            url = f"http://api.openweathermap.org/data/2.5/weather?q={query}&appid={API_KEY}"
+            response = requests.get(url)
+            response.raise_for_status()
+            data = response.json()
+
+            # Extract and adjust sunrise/sunset times
+            timezone_offset = data["timezone"]
+            sunrise_utc = datetime.utcfromtimestamp(data["sys"]["sunrise"])
+            sunset_utc = datetime.utcfromtimestamp(data["sys"]["sunset"])
+
+            tz = pytz.timezone(timezone)
+            sunrise = sunrise_utc + timedelta(seconds=timezone_offset)
+            sunset = sunset_utc + timedelta(seconds=timezone_offset)
+            sunrise = sunrise.astimezone(tz)
+            sunset = sunset.astimezone(tz)
+
+            # Calculate golden hour times
+            golden_hour_start = sunrise - timedelta(minutes=30)
+            golden_hour_end = sunset + timedelta(minutes=30)
+
+            # Fetch weather conditions
+            weather = data["weather"][0]["description"]
+            temperature = data["main"]["temp"] - 273.15  # Convert Kelvin to Celsius
+
+            # Generate photographic tips
+            tips = [
+                "Use a tripod for steady shots during low light.",
+                "Experiment with silhouettes by capturing subjects against the sun.",
+                "Look for reflections in water or glass.",
+                "Adjust white balance for warmer tones."
+            ]
+
+            output = f"""
+            Golden Hour Times:
+            Sunrise: {sunrise.strftime('%H:%M:%S')}
+            Sunset: {sunset.strftime('%H:%M:%S')}
+            Morning Golden Hour: {golden_hour_start.strftime('%H:%M:%S')} - {sunrise.strftime('%H:%M:%S')}
+            Evening Golden Hour: {sunset.strftime('%H:%M:%S')} - {golden_hour_end.strftime('%H:%M:%S')}
+
+            Weather: {weather.capitalize()}
+            Temperature: {temperature:.2f}°C
+            """
+        except requests.exceptions.RequestException as e:
+            output = f"Error fetching data from OpenWeatherMap: {str(e)}"
+        except Exception as e:
+            output = f"Error calculating golden hour times: {str(e)}"
+
+    return render_template("golden_hour.html", lang=lang, search_type=search_type, city=city,
+                           country=country, zip_code=zip_code, timezone=timezone,
+                           date_selected=date_selected, output=output, tips=tips)
+
+
+@app.route("/map", methods=["GET"])
+def map_view():
+    # Render interactive map (placeholder for integration with Leaflet.js or Google Maps API)
+    return jsonify({"message": "Map feature coming soon"})
+
+
+@app.route("/notify", methods=["POST"])
+def notify_user():
+    # Placeholder for email/SMS notification integration
+    return jsonify({"message": "Notification feature coming soon"})
+
+
+if __name__ == "__main__":
+    app.run(debug=True)
